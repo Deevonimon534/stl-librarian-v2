@@ -188,6 +188,16 @@ for i, fp in enumerate(file_paths):
                 
         #delete object
         bpy.ops.object.delete() 
+        
+        #delete orphan meshes 
+        for block in bpy.data.meshes:
+            if block.users == 0:
+                bpy.data.meshes.remove(block)
+        
+        #delete orphan curves (text)
+        for block in bpy.data.curves:
+            if block.users == 0:
+                bpy.data.curves.remove(block)
 
 ########################################
 #        
