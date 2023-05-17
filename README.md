@@ -8,11 +8,17 @@ When hovering over an image, it will show the animated gif, otherwise the still.
 
 This script will work on your system if you can get Blender 2.8 to run.
 
+### Install PIP
+
+PIP is the python package installer, may not be automatically installed on blender Python installation
+
+/path/to/blenders/python/bin> python -m pip install --upgrade pip
+
 ### Install PIL/Pillow
 
 PIL/Pillow is used to save the animated gif. Install it using pip if it is not installed:
 
-/path/to/blenders/python -m pip install pillow
+/path/to/blenders/python/bin> python -m pip install --upgrade Pillow
 
 ## Usage
 
