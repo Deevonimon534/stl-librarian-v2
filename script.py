@@ -1,4 +1,4 @@
-import os, bpy, sys, glob, math
+import os, bpy, sys, glob, math, re
 
 from math import radians
 from PIL import Image, ImageDraw
@@ -11,10 +11,21 @@ from PIL import Image, ImageDraw
 #
 ########################################
 
-#source_dir = "/home/user/librarian"
-#target_dir = "/home/user/librarian"
-source_dir = "C:/tmp/register/"
-target_dir = "C:/tmp/register/"
+print("")
+print("Beginning Library Creation")
+print("")
+
+########################################
+#
+# Set Root Library Directory
+#
+########################################
+
+#uncomment depending on OS, use '/'
+#Windows Format
+#library_dir = "C:/Your_STL_Library_Folder/"
+#Linux Format
+#library_dir = "/home/user/librarian"
 
 ########################################
 #
@@ -25,12 +36,12 @@ target_dir = "C:/tmp/register/"
 width = 500
 height = 500
 anim_frames = 16
-anim_seconds = 3
-anim_scale = 50
+anim_seconds = 2000
+anim_scale = 100
 
 ########################################
 #
-# program start
+# Program Start
 #
 ########################################
 
@@ -50,16 +61,34 @@ cam_rot = scene.camera.rotation_euler
 
 bpy.ops.object.select_all(action='DESELECT')
 
-#new empty list to save image names in for later creating html-view
-images = []
+#recursively generate and sort list of full file paths starting in root library_dir
+file_paths = list(glob.iglob(library_dir + '**/*.stl', recursive=True))
+file_paths.sort
 
-files = glob.glob(os.path.join(source_dir, "*%s" % "stl"))
-files.sort()
+# Replace any backslashes with regular slashes for consistency
+# Likely not needed on linux systems but shouldn't cause any issues
+for i,fp in enumerate(file_paths):
+    fp_corrected = re.sub(r'\\', r'/',fp)
+    file_paths[i] = fp_corrected
 
-for i, fp in enumerate(files):
+########################################
+#
+# Library Image/Gif Creation
+#
+# loop through list of stl filepaths and create a preview image and gif for each
+# both use the filepath with stl stripped off (fp_no_ext) with added suffix
+#
+# preview image: fp_no_ext + ".jpg"
+# gif frames: fp_no_ext + "_frame_" + str(index) + ".jpg"
+# gif file: fp_no_ext + "_anim.gif"
+#
+########################################
+for i, fp in enumerate(file_paths):
+    # Removes .stl file extension from filepath
+    fp_no_ext = re.sub(r'\.stl', r'', fp) 
     if (i < 1000): #set this to a low value for testing
         #load model
-        bpy.ops.import_mesh.stl(filepath=fp)
+        bpy.ops.import_mesh.stl(filepath=fp,axis_up='Z')
         ob = bpy.context.active_object
         modelname = ob.name
 
@@ -90,25 +119,27 @@ for i, fp in enumerate(files):
         
         #scale text to match model
         obj_size = math.sqrt(ob.dimensions[0]**2 + ob.dimensions[1]**2 + ob.dimensions[2]**2)
+        print (obj_size)
         text_size = math.sqrt(textobject.dimensions[0]**2 + textobject.dimensions[1]**2 + textobject.dimensions[2]**2)
+        print (text_size)
         scale = obj_size / (text_size * 2)
+        print ("scale", scale)
         textobject.scale = (scale, scale, scale)
 
         #text material
         textobject.data.materials.append(textmat)
 
-        #focus camera on object
+        #focus camera on object and make text visible
         ob.select_set(True)
         textobject.select_set(True)
         scene.camera.data.angle = radians(45)
         bpy.ops.view3d.camera_to_view_selected()
         scene.camera.data.angle = radians(50)
         
-        #set render properties and render
+        #set render properties and render still preview image
         scene.render.resolution_percentage = 100
-        bpy.context.scene.render.filepath = target_dir + modelname + ".jpg"
+        bpy.context.scene.render.filepath = fp_no_ext + ".jpg"
         bpy.ops.render.render(use_viewport = True, write_still=True)
-        images.append(modelname)
 
         #Delete text
         ob.select_set(False)
@@ -118,11 +149,12 @@ for i, fp in enumerate(files):
         #reposition camera
         scene.camera.data.angle = radians(45)
         bpy.ops.view3d.camera_to_view_selected()
-        scene.camera.data.angle = radians(50)
+        scene.camera.data.angle = radians(60)
         loc = scene.camera.location
         camera_z = scene.camera.location[2]
         distance = math.sqrt(loc[0] * loc[0] + loc[1] * loc[1])
-
+    
+        #create set number of frames for gif
         animnames = []
         for index in range(anim_frames):
             # rotate camera based on angle
@@ -132,22 +164,38 @@ for i, fp in enumerate(files):
             
             #set render properties and render
             scene.render.resolution_percentage = anim_scale
-            filename = target_dir + "frame_" + str(index) + ".jpg"
+            filename = fp_no_ext + "_frame_" + str(index) + ".jpg"
             animnames.append(filename)
             bpy.context.scene.render.filepath = filename
             bpy.ops.render.render(use_viewport = True, write_still=True)
 
+        #convert frame images to RGB and store in array
         anim = []
         for index in range(anim_frames):
-            im = Image.open(animnames[index])
+            im = Image.open(animnames[index],mode='r')
+            im = im.convert('RGB')
+            im = im.quantize()
             anim.append(im)
-            
+        
+        #create rotation gif using frame image array
         gifim = anim[0]
-        gifim.save(target_dir + modelname + "_anim.gif", save_all=True, optimize=True, append_images=anim[1:anim_frames], duration=anim_seconds/anim_frames, loop=0)
+        gifim.save(fp_no_ext + "_anim.gif", save_all=True, optimize=True, append_images=anim[1:anim_frames], duration=anim_seconds/anim_frames, loop=0)
 
+        #delete individual frame images once gif is created
+        for im in animnames:
+            if os.path.exists(im):
+                os.remove(im)
+                
         #delete object
         bpy.ops.object.delete() 
 
+########################################
+#        
+# HTML Page Creation
+#
+########################################
+
+#html header
 html_top = """
 <!doctype html>
 
@@ -155,6 +203,14 @@ html_top = """
     <head>
         <style>"""
 
+#divider that specifies the directory containing the listed files
+css_directory_template = """
+<hr class="rounded">
+<h1>{0}</h1>
+<hr class="rounded">
+"""
+
+#template pair that adds both the preview still image and gif on mouse over
 css_template= """
         div.img{0} {{
             background-image: url('{1}.jpg');
@@ -168,19 +224,43 @@ css_template= """
             background-size: contain;
         }}"""
 
+#actual element to be added to page referencing template
 image_template = """
 <div class="img{0}" title="{1}">&nbsp;</div>"""
 
-with open(target_dir + "stl-model-register.html", "w") as file:
+# create html file and then loop through list of stl files once to add css templates and again to add html elements
+with open(library_dir + "stl-model-register.html", "w") as file:
     file.write(html_top)
-    for i, image in enumerate(images):
-        file.write(css_template.format(i, image, width, height))
+    #Build underlying CSS entries
+    for i, fp in enumerate(file_paths):
+        fp_no_ext = re.sub(r'\.stl', r'', fp)
+        file.write(css_template.format(i, fp_no_ext, width, height))
     file.write("</style></head><body>")
-    for i, image in enumerate(images):
-        file.write(image_template.format(i, image))
+
+    #start filepath variables as empty
+    #when the current does not equal the previous then a divider is added with new filepath
+    fp_dir = ""
+    fp_dir_prev = ""
+    
+    #Add visible elements to page using CSS entries
+    for i, fp in enumerate(file_paths):
+        #remove file name from filepath (everything between the last / and end)
+        fp_dir = re.sub(r'[^/]*$',r'',fp)
+        #for each new directory add a divider with the directory path
+        if fp_dir != fp_dir_prev:
+            file.write(css_directory_template.format(fp_dir))
+        #remove stl extension from file path
+        fp_no_ext = re.sub(r'\.stl', r'', fp)
+        file.write(image_template.format(i, fp_no_ext))
+        fp_dir_prev = fp_dir
     file.write("</body></html>")
     
-for index in range(anim_frames):
-    os.remove(animnames[index])
+print("")
+print("Completed Library Creation")
+print("")
 
-print("Ook")
+########################################
+#        
+# Program End
+#
+########################################
