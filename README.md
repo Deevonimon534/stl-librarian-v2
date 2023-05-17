@@ -1,6 +1,6 @@
-# stl-librarian
+# stl-librarian-v2
 Generate a register with images of all stl-files in a folder. Two images for each model will be rendered. One is a still, including the name of the file. The other is an animated gif showing a rotating model. An html-file will be created with image tags for all images.
-When hovering over an image, it will show the animated gif, otherwise the still.
+When hovering over an image, it will show the animated gif.
 
 ![Register example](screenshot.png)
 
